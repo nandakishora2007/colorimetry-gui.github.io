@@ -1,0 +1,882 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SmartColorimetry — Auto Fe³⁺-SCN⁻ Analyzer</title>
+<style>
+  :root{
+    --bg:#0d1117; --panel:#151b23; --panel-2:#1b2330; --line:#2a3441;
+    --text:#dbe2ea; --text-dim:#7f8ea3; --accent:#c0392b; --accent-2:#e0603c;
+    --good:#4caf7d; --bad:#e0603c; --warn:#e0a83c;
+    --mono:'SF Mono','JetBrains Mono',Consolas,monospace;
+    --sans:-apple-system,BlinkMacSystemFont,'Segoe UI',Inter,sans-serif;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0; background:var(--bg); color:var(--text); font-family:var(--sans); line-height:1.5; padding:0 0 60px 0;}
+  header{padding:24px 24px 16px 24px; border-bottom:1px solid var(--line); display:flex; align-items:baseline; gap:14px; flex-wrap:wrap;}
+  header h1{font-size:19px; margin:0; font-weight:700;}
+  header h1 span{color:var(--accent-2);}
+  header .sub{color:var(--text-dim); font-size:12px; font-family:var(--mono);}
+  .tabs{display:flex; gap:2px; margin:0 24px; border-bottom:1px solid var(--line);}
+  .tab{padding:11px 18px; cursor:pointer; color:var(--text-dim); font-size:14px; border-bottom:2px solid transparent; user-select:none;}
+  .tab.active{color:var(--text); border-bottom-color:var(--accent-2);}
+  .page{display:none; padding:20px 24px; max-width:1500px;}
+  .page.active{display:block;}
+  .grid{display:grid; grid-template-columns:400px 1fr; gap:20px; align-items:start;}
+  @media (max-width:1000px){ .grid{grid-template-columns:1fr;} }
+  .panel{background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:16px 18px; margin-bottom:16px;}
+  .panel h2{font-size:11px; text-transform:uppercase; letter-spacing:0.08em; color:var(--text-dim); margin:0 0 12px 0; font-weight:600;}
+  label{display:block; font-size:13px; color:var(--text-dim); margin:10px 0 4px 0;}
+  label:first-child{margin-top:0;}
+  input[type=text], input[type=number], select{
+    width:100%; background:var(--panel-2); border:1px solid var(--line); color:var(--text);
+    padding:7px 9px; border-radius:5px; font-size:13px; font-family:var(--sans);
+  }
+  input[type=range]{width:100%;}
+  .row{display:flex; gap:8px;}
+  .row > *{flex:1;}
+  .file-row{display:flex; gap:8px; margin-top:6px;}
+  .file-btn{
+    flex:1; text-align:center; background:var(--panel-2); border:1px solid var(--line);
+    color:var(--text); padding:9px 8px; border-radius:5px; font-size:12px; cursor:pointer;
+    position:relative; overflow:hidden;
+  }
+  .file-btn input{position:absolute; inset:0; opacity:0; cursor:pointer; width:100%;}
+  button{background:var(--accent-2); color:#1a0e06; border:none; padding:9px 16px; border-radius:5px; font-size:13px; font-weight:600; cursor:pointer; font-family:var(--sans);}
+  button.secondary{background:var(--panel-2); color:var(--text); border:1px solid var(--line);}
+  button:disabled{opacity:0.4; cursor:not-allowed;}
+  button.small{padding:5px 10px; font-size:12px;}
+  .canvas-wrap{background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:14px; position:relative;}
+  canvas{max-width:100%; display:block; margin:0 auto; border-radius:4px;}
+  .hint{color:var(--text-dim); font-size:12px; margin-top:8px; font-family:var(--mono);}
+  .warnbox{background:#2a1f14; border:1px solid var(--warn); color:var(--warn); padding:8px 10px; border-radius:5px; font-size:12px; margin-top:8px;}
+  table{width:100%; border-collapse:collapse; font-size:12px; margin-top:4px;}
+  th, td{text-align:left; padding:6px 7px; border-bottom:1px solid var(--line); font-family:var(--mono); font-size:11.5px;}
+  th{color:var(--text-dim); font-weight:600; text-transform:uppercase; font-size:9.5px; letter-spacing:0.05em;}
+  .swatch{width:14px; height:14px; border-radius:3px; display:inline-block; vertical-align:middle; margin-right:5px; border:1px solid var(--line);}
+  .metric{display:flex; justify-content:space-between; padding:6px 0; border-bottom:1px solid var(--line); font-size:13px;}
+  .metric:last-child{border-bottom:none;}
+  .metric .val{font-family:var(--mono); font-weight:600;}
+  .qc-pass{color:var(--good);} .qc-fail{color:var(--bad);}
+  svg{width:100%; height:auto; display:block;}
+  .flex-between{display:flex; justify-content:space-between; align-items:center;}
+  .footnote{color:var(--text-dim); font-size:11px; margin-top:6px; font-family:var(--mono);}
+  .badge{display:inline-block; padding:2px 7px; border-radius:10px; font-size:10px; font-weight:600;}
+  .badge-good{background:#183328; color:var(--good);}
+  .badge-bad{background:#331e1e; color:var(--bad);}
+  .checkrow{display:flex; align-items:center; gap:8px; margin:10px 0 4px 0;}
+  .checkrow input{width:auto;}
+  .checkrow label{margin:0; color:var(--text);}
+  .spinner{display:inline-block; width:12px; height:12px; border:2px solid var(--line); border-top-color:var(--accent-2); border-radius:50%; animation:spin 0.7s linear infinite; vertical-align:middle; margin-right:6px;}
+  @keyframes spin{to{transform:rotate(360deg);}}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Smart<span>Colorimetry</span> — Auto</h1>
+  <div class="sub">Fe³⁺ + SCN⁻ → [Fe(SCN)]²⁺ (blood red) · automatic detection · runs entirely in your browser</div>
+</header>
+
+<div class="tabs">
+  <div class="tab active" data-page="calibrate">1 · Calibrate</div>
+  <div class="tab" data-page="analyze">2 · Analyze</div>
+</div>
+
+<!-- ================= CALIBRATE PAGE ================= -->
+<div class="page active" id="page-calibrate">
+  <div class="grid">
+    <div>
+      <div class="panel">
+        <h2>Standards</h2>
+        <label>Number of flasks</label>
+        <input type="number" id="numStandards" value="6" min="2" max="20">
+        <div class="hint">Enter each standard's known concentration (ppm), left to right in the photo.</div>
+        <div id="concInputs" style="margin-top:8px;"></div>
+      </div>
+
+      <div class="panel">
+        <h2>Photo</h2>
+        <div class="file-row">
+          <div class="file-btn">Upload image<input type="file" id="calUpload" accept="image/*"></div>
+          <div class="file-btn">Take photo<input type="file" id="calCapture" accept="image/*" capture="environment"></div>
+        </div>
+        <div class="hint">Flasks should be left-to-right, evenly lit, no direct flash glare on the glass.</div>
+        <div class="hint" style="margin-top:4px;">Tip: a plain white/gray backdrop behind the flasks gives much more reliable automatic segmentation than a busy background (windows, patterned walls) -- clear glass can let background color bleed through and confuse the red-liquid detector, especially for pale/low-concentration standards.</div>
+      </div>
+
+      <div class="panel">
+        <div class="flex-between">
+          <h2 style="margin:0;">Detection tuning</h2>
+          <span class="footnote">only if auto-detect misses</span>
+        </div>
+        <label>Ignore top of frame: <span id="calTopVal">10</span>%</label>
+        <input type="range" id="calSearchTop" min="0" max="45" value="10">
+        <label>Ignore bottom of frame: <span id="calBottomVal">10</span>%</label>
+        <input type="range" id="calSearchBottom" min="0" max="45" value="10">
+        <label>Outlier strictness (lower = stricter): <span id="calMadVal">2.5</span>×MAD</label>
+        <input type="range" id="calMadK" min="10" max="50" value="25">
+      </div>
+
+      <button id="calRunBtn" style="width:100%; padding:12px;" disabled>Detect &amp; Measure Flasks</button>
+    </div>
+
+    <div>
+      <div class="canvas-wrap">
+        <canvas id="calCanvas"></canvas>
+        <div class="hint" id="calCanvasHint">Upload or capture a photo to begin.</div>
+      </div>
+
+      <div class="panel" id="calTablePanel" style="display:none;">
+        <h2>Detected Flasks <span class="footnote">(cyan dots on image = pixels actually measured)</span></h2>
+        <table>
+          <thead><tr><th>#</th><th>Conc (ppm)</th><th>Mean RGB (inliers)</th><th>Pixels used / density</th><th>Status</th></tr></thead>
+          <tbody id="calTable"></tbody>
+        </table>
+        <div class="warnbox" id="calLowConfWarn" style="display:none;"></div>
+        <button id="computeCalBtn" style="width:100%; padding:11px; margin-top:12px;" disabled>Compute Calibration Curve</button>
+      </div>
+
+      <div class="panel" id="calResultsPanel" style="display:none;">
+        <h2>Regression Result (Green channel — Fe(SCN)²⁺ absorbs green)</h2>
+        <div id="calMetrics"></div>
+        <div id="calChart" style="margin-top:14px;"></div>
+        <div class="row" style="margin-top:14px;">
+          <input type="text" id="calSaveName" placeholder="Name this calibration">
+          <button id="saveCalBtn">Save in browser</button>
+          <button id="downloadCalBtn" class="secondary">Download .json</button>
+        </div>
+        <div class="footnote" id="calSaveStatus"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ================= ANALYZE PAGE ================= -->
+<div class="page" id="page-analyze">
+  <div class="grid">
+    <div>
+      <div class="panel">
+        <h2>Calibration</h2>
+        <label>Load saved calibration</label>
+        <select id="storedCalibs"></select>
+        <div class="row">
+          <button class="secondary small" id="refreshCalibs">Refresh list</button>
+          <button class="secondary small" id="loadCalibBtn">Load</button>
+        </div>
+        <label>...or upload a calibration.json</label>
+        <input type="file" id="calibUpload" accept="application/json">
+        <div id="calibSummary" class="footnote"></div>
+      </div>
+
+      <div class="panel">
+        <h2>Unknown sample(s)</h2>
+        <label>Number of flasks in this photo</label>
+        <input type="number" id="numSamples" value="1" min="1" max="20">
+        <div class="file-row">
+          <div class="file-btn">Upload image<input type="file" id="anUpload" accept="image/*"></div>
+          <div class="file-btn">Take photo<input type="file" id="anCapture" accept="image/*" capture="environment"></div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="flex-between">
+          <h2 style="margin:0;">Detection tuning</h2>
+          <span class="footnote">only if auto-detect misses</span>
+        </div>
+        <label>Ignore top of frame: <span id="anTopVal">10</span>%</label>
+        <input type="range" id="anSearchTop" min="0" max="45" value="10">
+        <label>Ignore bottom of frame: <span id="anBottomVal">10</span>%</label>
+        <input type="range" id="anSearchBottom" min="0" max="45" value="10">
+      </div>
+
+      <button id="anRunBtn" style="width:100%; padding:12px;" disabled>Detect, Measure &amp; Compute ppm</button>
+    </div>
+
+    <div>
+      <div class="canvas-wrap">
+        <canvas id="anCanvas"></canvas>
+        <div class="hint" id="anCanvasHint">Load a calibration, then upload or capture a sample photo.</div>
+      </div>
+
+      <div class="panel" id="anResultsPanel" style="display:none;">
+        <h2>Results</h2>
+        <table>
+          <thead><tr><th>#</th><th>Mean RGB</th><th>Absorbance</th><th>Concentration</th></tr></thead>
+          <tbody id="resultsTable"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ============================================================
+// Shared math: gamma linearization, absorbance, regression
+// ============================================================
+function linearizeChannel(value255){
+  const c = Math.min(1, Math.max(0, value255/255));
+  return c <= 0.04045 ? c/12.92 : Math.pow((c+0.055)/1.055, 2.4);
+}
+function absorbance(Isample, Iblank){
+  if(Iblank <= 0) return 0;
+  let t = Isample/Iblank;
+  t = Math.min(1, Math.max(1e-6, t));
+  return -Math.log10(t);
+}
+function linRegress(xs, ys){
+  const n = xs.length;
+  const mx = xs.reduce((a,b)=>a+b,0)/n;
+  const my = ys.reduce((a,b)=>a+b,0)/n;
+  let sxy=0, sxx=0, syy=0;
+  for(let i=0;i<n;i++){
+    sxy += (xs[i]-mx)*(ys[i]-my);
+    sxx += (xs[i]-mx)*(xs[i]-mx);
+    syy += (ys[i]-my)*(ys[i]-my);
+  }
+  const slope = sxy/sxx;
+  const intercept = my - slope*mx;
+  const r = sxx>0 && syy>0 ? sxy/Math.sqrt(sxx*syy) : 0;
+  return {slope, intercept, r2: r*r};
+}
+function rgbToHsv(r,g,b){
+  r/=255; g/=255; b/=255;
+  const max=Math.max(r,g,b), min=Math.min(r,g,b), d=max-min;
+  let h=0;
+  if(d!==0){
+    if(max===r) h = ((g-b)/d) % 6;
+    else if(max===g) h = (b-r)/d + 2;
+    else h = (r-g)/d + 4;
+    h *= 60;
+    if(h<0) h += 360;
+  }
+  const s = max===0 ? 0 : d/max;
+  const v = max;
+  return {h, s, v};
+}
+
+// ============================================================
+// Image loading -> single working-resolution canvas (never upscale)
+// ============================================================
+function loadImageToCanvas(file, canvasEl, maxWidth, onReady){
+  const reader = new FileReader();
+  reader.onload = e => {
+    const img = new Image();
+    img.onload = () => {
+      const scale = Math.min(1, maxWidth/img.width);
+      const w = Math.round(img.width*scale), h = Math.round(img.height*scale);
+      canvasEl.width = w; canvasEl.height = h;
+      const ctx = canvasEl.getContext('2d', {willReadFrequently:true});
+      ctx.drawImage(img, 0, 0, w, h);
+      onReady(ctx, w, h);
+    };
+    img.src = e.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+
+// ============================================================
+// Flask detection: gradient-magnitude column/row projection
+// (ported from the validated Python edge-projection detector)
+// ============================================================
+function grayscaleAndGradient(ctx, w, h){
+  const data = ctx.getImageData(0,0,w,h).data;
+  const gray = new Float32Array(w*h);
+  for(let i=0;i<w*h;i++){
+    const idx = i*4;
+    gray[i] = 0.299*data[idx] + 0.587*data[idx+1] + 0.114*data[idx+2];
+  }
+  const grad = new Float32Array(w*h);
+  for(let y=1;y<h-1;y++){
+    for(let x=1;x<w-1;x++){
+      const i = y*w+x;
+      const gx = gray[i+1] - gray[i-1];
+      const gy = gray[i+w] - gray[i-w];
+      grad[i] = Math.sqrt(gx*gx+gy*gy);
+    }
+  }
+  return grad;
+}
+function smooth1D(arr, window){
+  const n = arr.length, out = new Float32Array(n);
+  const half = Math.floor(window/2);
+  let sum = 0;
+  for(let i=0;i<Math.min(window,n);i++) sum += arr[i];
+  for(let i=0;i<n;i++){
+    const lo = Math.max(0,i-half), hi = Math.min(n-1,i+half);
+    let s=0; for(let j=lo;j<=hi;j++) s+=arr[j];
+    out[i] = s/(hi-lo+1);
+  }
+  return out;
+}
+function findNPeaks(arr, count, minDistance){
+  const candidates = [];
+  for(let i=1;i<arr.length-1;i++){
+    if(arr[i] >= arr[i-1] && arr[i] >= arr[i+1] && arr[i] > 0) candidates.push({i, v:arr[i]});
+  }
+  candidates.sort((a,b)=>b.v-a.v);
+  const chosen = [];
+  for(const c of candidates){
+    if(chosen.every(p => Math.abs(p.i-c.i) >= minDistance)){
+      chosen.push(c);
+      if(chosen.length >= count) break;
+    }
+  }
+  return chosen.map(c=>c.i).sort((a,b)=>a-b);
+}
+function detectFlasks(ctx, w, h, count, searchTopFrac, searchBottomFrac){
+  const grad = grayscaleAndGradient(ctx, w, h);
+  const y0 = Math.floor(h*searchTopFrac), y1 = Math.ceil(h*(1-searchBottomFrac));
+  if(y1<=y0) throw new Error('Search band invalid -- top+bottom exclusion covers the whole image.');
+
+  const colSum = new Float32Array(w);
+  for(let x=0;x<w;x++){
+    let s=0;
+    for(let y=y0;y<y1;y++) s += grad[y*w+x];
+    colSum[x] = s;
+  }
+  const colSmooth = smooth1D(colSum, Math.max(5, Math.round(w*0.012)));
+  const minDist = Math.max(10, Math.floor(w/(count*3)));
+  const peaks = findNPeaks(colSmooth, count, minDist);
+  if(peaks.length < count){
+    throw new Error(`Only found ${peaks.length} distinct flask column(s) of edge activity, expected ${count}. Try adjusting the "ignore top/bottom" sliders, a less cluttered background, or better lighting.`);
+  }
+
+  const gaps = [];
+  for(let i=0;i<peaks.length-1;i++) gaps.push(peaks[i+1]-peaks[i]);
+  const avgGap = gaps.length ? gaps.reduce((a,b)=>a+b,0)/gaps.length : w/2;
+
+  const boundaries = [Math.max(0, Math.round(peaks[0]-avgGap/2))];
+  for(let i=0;i<peaks.length-1;i++) boundaries.push(Math.round((peaks[i]+peaks[i+1])/2));
+  boundaries.push(Math.min(w, Math.round(peaks[peaks.length-1]+avgGap/2)));
+
+  const boxes = [];
+  for(let i=0;i<peaks.length;i++){
+    let x0 = Math.max(0,boundaries[i]), x1 = Math.min(w,boundaries[i+1]);
+    if(x1<=x0) continue;
+
+    const rowSum = new Float32Array(h);
+    for(let y=0;y<h;y++){
+      let s=0;
+      for(let x=x0;x<x1;x++) s += grad[y*w+x];
+      rowSum[y] = s;
+    }
+    const rowSmooth = smooth1D(rowSum, Math.max(5, Math.round(h*0.012)));
+    let seed = y0, seedVal = -1;
+    for(let y=y0;y<y1;y++){ if(rowSmooth[y]>seedVal){ seedVal=rowSmooth[y]; seed=y; } }
+    if(seedVal<=0){ continue; }
+
+    let bandEnergy = 0;
+    for(let y=y0;y<y1;y++) bandEnergy += rowSmooth[y];
+    const target = 0.80*bandEnergy;
+
+    let top=seed, bottom=seed, captured=rowSmooth[seed];
+    while(captured<target && (top>y0 || bottom<y1-1)){
+      const gu = top>y0 ? rowSmooth[top-1] : -1;
+      const gd = bottom<y1-1 ? rowSmooth[bottom+1] : -1;
+      if(gu<=0 && gd<=0) break;
+      if(gu>=gd){ top--; captured+=Math.max(gu,0); }
+      else{ bottom++; captured+=Math.max(gd,0); }
+    }
+    boxes.push({x:x0, y:top, w:x1-x0, h:bottom-top});
+  }
+
+  const heights = boxes.map(b=>b.h);
+  if(heights.length>1){
+    const mean = heights.reduce((a,b)=>a+b,0)/heights.length;
+    const std = Math.sqrt(heights.reduce((a,b)=>a+(b-mean)**2,0)/heights.length);
+    const cv = mean>0 ? std/mean : Infinity;
+    if(cv>0.35){
+      boxes._warning = `Box heights are inconsistent (${heights.join(', ')}) -- detection may have locked onto background clutter for at least one flask. Check the preview image carefully, and adjust the top/bottom sliders if needed.`;
+    }
+  }
+  return boxes;
+}
+
+// ============================================================
+// Automatic red-liquid segmentation + outlier (glare/shadow) rejection
+// ============================================================
+function segmentAndMeasure(ctx, box, options){
+  const {topCropFrac, bottomCropFrac, madK} = options;
+  const topCut = Math.round(box.h*topCropFrac);
+  const bottomCut = Math.round(box.h*bottomCropFrac);
+  const roiY0 = box.y + topCut, roiY1 = box.y + box.h - bottomCut;
+  if(roiY1 <= roiY0) throw new Error('Flask crop region too small after trimming neck/base.');
+
+  const imgData = ctx.getImageData(box.x, roiY0, box.w, roiY1-roiY0);
+  const data = imgData.data;
+  const n = box.w*(roiY1-roiY0);
+
+  // Pass 1: hue/value gate to isolate red liquid from glass, label, and
+  // specular highlights. Saturation threshold is progressively relaxed --
+  // pale/near-colorless standards (low ppm) legitimately have low
+  // saturation, so a single fixed cutoff would wrongly reject them.
+  const satLevels = [0.28, 0.20, 0.14, 0.10];
+  let candR=[], candG=[], candB=[], candX=[], candY=[], satUsed=null;
+  for(const satMin of satLevels){
+    candR=[]; candG=[]; candB=[]; candX=[]; candY=[];
+    for(let i=0;i<n;i++){
+      const idx=i*4;
+      const r=data[idx], g=data[idx+1], b=data[idx+2];
+      const {h,s,v} = rgbToHsv(r,g,b);
+      const isRedHue = (h<=25 || h>=335);
+      const isSaturated = s >= satMin;
+      const isNotGlare = v <= 0.93;
+      const isNotShadow = v >= 0.10;
+      if(isRedHue && isSaturated && isNotGlare && isNotShadow){
+        candR.push(r); candG.push(g); candB.push(b);
+        candX.push(box.x + (i % box.w));
+        candY.push(roiY0 + Math.floor(i / box.w));
+      }
+    }
+    if(candR.length >= 20){ satUsed = satMin; break; }
+  }
+  if(candR.length < 20){
+    throw new Error('Could not find enough red-liquid pixels in this flask even after relaxing the saturation gate -- check lighting/focus, or verify the flask actually contains a reddish solution.');
+  }
+
+  // Pass 2: robust outlier rejection via median + MAD per channel.
+  function median(arr){
+    const s = [...arr].sort((a,b)=>a-b);
+    const m = s.length>>1;
+    return s.length%2 ? s[m] : (s[m-1]+s[m])/2;
+  }
+  function mad(arr, med){
+    const dev = arr.map(v=>Math.abs(v-med));
+    return median(dev) || 1e-6;
+  }
+  const medR=median(candR), medG=median(candG), medB=median(candB);
+  const madR=mad(candR,medR), madG=mad(candG,medG), madB=mad(candB,medB);
+  const k = madK;
+
+  let sr=0, sg=0, sb=0, kept=0;
+  const keptX=[], keptY=[];
+  for(let i=0;i<candR.length;i++){
+    const okR = Math.abs(candR[i]-medR) <= k*madR*1.4826;
+    const okG = Math.abs(candG[i]-medG) <= k*madG*1.4826;
+    const okB = Math.abs(candB[i]-medB) <= k*madB*1.4826;
+    if(okR && okG && okB){
+      sr+=candR[i]; sg+=candG[i]; sb+=candB[i]; kept++;
+      keptX.push(candX[i]); keptY.push(candY[i]);
+    }
+  }
+  if(kept < 10){ sr=medR*kept||medR; sg=medG*kept||medG; sb=medB*kept||medB; kept=Math.max(kept,1); }
+
+  const roiArea = box.w * (roiY1-roiY0);
+  const density = kept / roiArea;
+  const lowConfidence = density < 0.02;
+
+  return {
+    mean_rgb: [sr/kept, sg/kept, sb/kept],
+    pixel_count: kept,
+    candidate_count: candR.length,
+    sat_threshold_used: satUsed,
+    inlier_x: keptX, inlier_y: keptY,
+    density: density,
+    low_confidence: lowConfidence,
+    roi: {x:box.x, y:roiY0, w:box.w, h:roiY1-roiY0}
+  };
+}
+
+// ============================================================
+// Preview drawing
+// ============================================================
+function drawPreview(canvasEl, boxes, warning){
+  const ctx = canvasEl.getContext('2d');
+  boxes.forEach((b,i) => {
+    ctx.strokeStyle = '#4caf7d';
+    ctx.lineWidth = Math.max(2, canvasEl.width/400);
+    ctx.strokeRect(b.x, b.y, b.w, b.h);
+    ctx.fillStyle = '#4caf7d';
+    ctx.font = 'bold 16px monospace';
+    ctx.fillText(String(i), b.x+4, b.y+20);
+  });
+}
+function drawInlierOverlay(canvasEl, results){
+  const ctx = canvasEl.getContext('2d');
+  ctx.fillStyle = 'rgba(0,220,255,0.55)';
+  results.forEach(r => {
+    if(!r || !r.inlier_x) return;
+    for(let i=0;i<r.inlier_x.length;i++){
+      ctx.fillRect(r.inlier_x[i], r.inlier_y[i], 1, 1);
+    }
+  });
+}
+
+// ============================================================
+// Storage helpers (localStorage -- this file runs standalone)
+// ============================================================
+async function storageSet(key, value){
+  try{ localStorage.setItem(key, JSON.stringify(value)); return true; }catch(e){ return false; }
+}
+async function storageGet(key){
+  try{ const v=localStorage.getItem(key); return v?JSON.parse(v):null; }catch(e){ return null; }
+}
+async function storageList(prefix){
+  try{
+    const keys=[];
+    for(let i=0;i<localStorage.length;i++){ const k=localStorage.key(i); if(k&&k.startsWith(prefix)) keys.push(k); }
+    return keys;
+  }catch(e){ return []; }
+}
+function downloadJSON(filename, obj){
+  const blob = new Blob([JSON.stringify(obj,null,2)], {type:'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a'); a.href=url; a.download=filename;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+function validateCalibration(cal){
+  const problems=[];
+  if(!cal) return ['No calibration object.'];
+  if(typeof cal.slope!=='number'||!isFinite(cal.slope)) problems.push(`slope invalid (${cal.slope})`);
+  if(typeof cal.intercept!=='number'||!isFinite(cal.intercept)) problems.push(`intercept invalid (${cal.intercept})`);
+  if(typeof cal.r2!=='number'||!isFinite(cal.r2)) problems.push(`r2 invalid (${cal.r2})`);
+  if(typeof cal.blankLinearIntensity!=='number'||!isFinite(cal.blankLinearIntensity)) problems.push(`blankLinearIntensity invalid (${cal.blankLinearIntensity})`);
+  return problems;
+}
+
+// ============================================================
+// TAB SWITCHING
+// ============================================================
+document.querySelectorAll('.tab').forEach(tab=>{
+  tab.addEventListener('click', ()=>{
+    document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+    document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+    tab.classList.add('active');
+    document.getElementById('page-'+tab.dataset.page).classList.add('active');
+  });
+});
+
+// ============================================================
+// CALIBRATE PAGE
+// ============================================================
+const calCanvas = document.getElementById('calCanvas');
+let calStandards = [];
+let calImgReady = false;
+
+document.getElementById('calSearchTop').addEventListener('input', e=>document.getElementById('calTopVal').textContent=e.target.value);
+document.getElementById('calSearchBottom').addEventListener('input', e=>document.getElementById('calBottomVal').textContent=e.target.value);
+document.getElementById('calMadK').addEventListener('input', e=>document.getElementById('calMadVal').textContent=(e.target.value/10).toFixed(1));
+
+function rebuildConcInputs(){
+  const n = parseInt(document.getElementById('numStandards').value);
+  const container = document.getElementById('concInputs');
+  container.innerHTML = '';
+  const defaults = [0,2,4,6,8,10,12,14,16,18,20];
+  for(let i=0;i<n;i++){
+    const row = document.createElement('div');
+    row.style.marginBottom = '4px';
+    row.innerHTML = `<input type="number" step="any" class="concInput" data-i="${i}" placeholder="Standard ${i+1} (ppm)" value="${defaults[i]!==undefined?defaults[i]:''}">`;
+    container.appendChild(row);
+  }
+}
+document.getElementById('numStandards').addEventListener('change', rebuildConcInputs);
+rebuildConcInputs();
+
+function loadCalImage(file){
+  document.getElementById('calCanvasHint').textContent = 'Loading...';
+  loadImageToCanvas(file, calCanvas, 1000, (ctx,w,h)=>{
+    calImgReady = true;
+    document.getElementById('calRunBtn').disabled = false;
+    document.getElementById('calCanvasHint').textContent = 'Image loaded. Click "Detect & Measure Flasks".';
+    document.getElementById('calTablePanel').style.display = 'none';
+    document.getElementById('calResultsPanel').style.display = 'none';
+  });
+}
+document.getElementById('calUpload').addEventListener('change', e=>{ if(e.target.files[0]) loadCalImage(e.target.files[0]); });
+document.getElementById('calCapture').addEventListener('change', e=>{ if(e.target.files[0]) loadCalImage(e.target.files[0]); });
+
+document.getElementById('calRunBtn').addEventListener('click', ()=>{
+  const n = parseInt(document.getElementById('numStandards').value);
+  const concs = Array.from(document.querySelectorAll('.concInput')).map(i=>parseFloat(i.value)||0);
+  const searchTop = parseInt(document.getElementById('calSearchTop').value)/100;
+  const searchBottom = parseInt(document.getElementById('calSearchBottom').value)/100;
+  const madK = parseInt(document.getElementById('calMadK').value)/10;
+
+  const ctx = calCanvas.getContext('2d', {willReadFrequently:true});
+  const w = calCanvas.width, h = calCanvas.height;
+
+  // redraw clean (undo any previous box overlay) by reloading last image data is not stored,
+  // so instead we just re-fetch pixels fresh via getImageData before drawing new overlay --
+  // safe since detection only reads pixels, doesn't mutate them.
+  let boxes;
+  try{
+    boxes = detectFlasks(ctx, w, h, n, searchTop, searchBottom);
+  }catch(err){
+    document.getElementById('calCanvasHint').innerHTML = '<span style="color:#e0603c;">'+err.message+'</span>';
+    return;
+  }
+
+  drawPreview(calCanvas, boxes, boxes._warning);
+  document.getElementById('calCanvasHint').innerHTML = boxes._warning
+    ? '<span style="color:#e0a83c;">'+boxes._warning+'</span>'
+    : `Found ${boxes.length} flask(s).`;
+
+  calStandards = boxes.map((box,i)=>{
+    let result, error=null;
+    try{
+      result = segmentAndMeasure(ctx, box, {topCropFrac:0.28, bottomCropFrac:0.12, madK});
+    }catch(err){ error = err.message; }
+    return {conc: concs[i]||0, box, result, error};
+  });
+  drawInlierOverlay(calCanvas, calStandards.map(s=>s.result));
+  renderCalTable();
+  document.getElementById('calTablePanel').style.display = 'block';
+  document.getElementById('calResultsPanel').style.display = 'none';
+});
+
+function renderCalTable(){
+  const tbody = document.getElementById('calTable');
+  tbody.innerHTML = '';
+  let allOk = true;
+  let anyLowConfidence = false;
+  calStandards.forEach((s,i)=>{
+    const tr = document.createElement('tr');
+    if(s.error){
+      allOk = false;
+      tr.innerHTML = `<td>${i}</td><td>${s.conc}</td><td colspan="2" style="color:#e0603c;">${s.error}</td><td class="badge badge-bad">failed</td>`;
+    } else {
+      const rgb = s.result.mean_rgb;
+      const badge = s.result.low_confidence
+        ? '<span class="badge badge-bad" title="Very few/sparse pixels matched -- likely picked up background or glass glare rather than the liquid. Check the cyan overlay on the image.">low confidence</span>'
+        : '<span class="badge badge-good">ok</span>';
+      if(s.result.low_confidence) anyLowConfidence = true;
+      tr.innerHTML = `
+        <td>${i}</td><td>${s.conc}</td>
+        <td><span class="swatch" style="background:rgb(${rgb[0]|0},${rgb[1]|0},${rgb[2]|0})"></span>${rgb.map(v=>v.toFixed(1)).join(', ')}</td>
+        <td>${s.result.pixel_count} / ${s.result.candidate_count} (density ${(s.result.density*100).toFixed(2)}%)</td>
+        <td>${badge}</td>
+      `;
+    }
+    tbody.appendChild(tr);
+  });
+  document.getElementById('computeCalBtn').disabled = !allOk || calStandards.length<2;
+  const warnBox = document.getElementById('calLowConfWarn');
+  if(anyLowConfidence){
+    warnBox.style.display = 'block';
+    warnBox.innerHTML = 'One or more flasks show "low confidence" -- the cyan dots on the image (zoom in) show exactly which pixels were counted. Sparse/scattered dots usually mean the liquid is too pale to distinguish automatically, or light is passing through clear glass showing background color. Consider a plain white/gray backdrop, better lighting, or verify these readings manually.';
+  } else {
+    warnBox.style.display = 'none';
+  }
+}
+
+let lastCalibration = null;
+
+document.getElementById('computeCalBtn').addEventListener('click', ()=>{
+  const blankIdx = calStandards.reduce((minI,s,i,arr)=> s.conc<arr[minI].conc?i:minI, 0);
+  const I0 = linearizeChannel(calStandards[blankIdx].result.mean_rgb[1]); // green channel index 1
+  const xs=[], ys=[];
+  calStandards.forEach(s=>{
+    const I = linearizeChannel(s.result.mean_rgb[1]);
+    const A = absorbance(I, I0);
+    xs.push(s.conc); ys.push(A);
+  });
+  const fit = linRegress(xs, ys);
+  const qcThreshold = 0.98;
+  const passed = fit.r2 >= qcThreshold;
+
+  lastCalibration = {
+    channel: 'g',
+    gammaMode: 'exact',
+    slope: fit.slope, intercept: fit.intercept, r2: fit.r2,
+    blankLinearIntensity: I0,
+    analyte: 'Fe3+-SCN- (thiocyanatoiron(III), blood red)',
+    camera: 'unknown',
+    standards: calStandards.map(s=>({conc:s.conc, rgb:{r:s.result.mean_rgb[0], g:s.result.mean_rgb[1], b:s.result.mean_rgb[2]}})),
+    createdAt: new Date().toISOString()
+  };
+
+  const panel = document.getElementById('calResultsPanel');
+  panel.style.display = 'block';
+  document.getElementById('calMetrics').innerHTML = `
+    <div class="metric"><span>Slope (m)</span><span class="val">${fit.slope.toFixed(5)}</span></div>
+    <div class="metric"><span>Intercept (b)</span><span class="val">${fit.intercept.toFixed(5)}</span></div>
+    <div class="metric"><span>R²</span><span class="val ${passed?'qc-pass':'qc-fail'}">${fit.r2.toFixed(4)} ${passed?'PASS':'FAIL (< '+qcThreshold+')'}</span></div>
+  `;
+  document.getElementById('calChart').innerHTML = renderChartSVG(xs, ys, fit.slope, fit.intercept);
+});
+
+function renderChartSVG(xs, ys, slope, intercept){
+  const W=380,H=220,pad=36;
+  const maxX = Math.max(...xs)*1.1;
+  const maxY = Math.max(...ys, slope*maxX+intercept, 0.01)*1.15;
+  const sx = x => pad + (x/maxX)*(W-2*pad);
+  const sy = y => H-pad - (y/maxY)*(H-2*pad);
+  const points = xs.map((x,i)=>`<circle cx="${sx(x)}" cy="${sy(ys[i])}" r="4" fill="#e0603c"/>`).join('');
+  const line = `<line x1="${sx(0)}" y1="${sy(intercept)}" x2="${sx(maxX)}" y2="${sy(slope*maxX+intercept)}" stroke="#4caf7d" stroke-width="2" stroke-dasharray="4,3"/>`;
+  return `<svg viewBox="0 0 ${W} ${H}">
+    <line x1="${pad}" y1="${H-pad}" x2="${W-pad}" y2="${H-pad}" stroke="#2a3441"/>
+    <line x1="${pad}" y1="${pad}" x2="${pad}" y2="${H-pad}" stroke="#2a3441"/>
+    <text x="${W/2}" y="${H-6}" fill="#7f8ea3" font-size="10" text-anchor="middle" font-family="monospace">Concentration (ppm)</text>
+    <text x="12" y="${H/2}" fill="#7f8ea3" font-size="10" text-anchor="middle" font-family="monospace" transform="rotate(-90 12 ${H/2})">Absorbance (Green)</text>
+    ${line}${points}
+  </svg>`;
+}
+
+document.getElementById('saveCalBtn').addEventListener('click', async ()=>{
+  if(!lastCalibration){ document.getElementById('calSaveStatus').textContent='Nothing to save yet.'; return; }
+  const name = document.getElementById('calSaveName').value.trim();
+  if(!name){ document.getElementById('calSaveStatus').textContent='Enter a name first.'; return; }
+  const ok = await storageSet('calibration:'+name, lastCalibration);
+  document.getElementById('calSaveStatus').textContent = ok
+    ? `Saved as "${name}" in this browser.`
+    : 'Could not save to browser storage -- use Download instead.';
+});
+document.getElementById('downloadCalBtn').addEventListener('click', ()=>{
+  if(!lastCalibration){ document.getElementById('calSaveStatus').textContent='Nothing to download yet.'; return; }
+  const name = document.getElementById('calSaveName').value.trim() || 'calibration';
+  downloadJSON(name+'.json', lastCalibration);
+  document.getElementById('calSaveStatus').textContent = `Downloaded ${name}.json`;
+});
+
+// ============================================================
+// ANALYZE PAGE
+// ============================================================
+const anCanvas = document.getElementById('anCanvas');
+let loadedCalibration = null;
+let anImgReady = false;
+
+document.getElementById('anSearchTop').addEventListener('input', e=>document.getElementById('anTopVal').textContent=e.target.value);
+document.getElementById('anSearchBottom').addEventListener('input', e=>document.getElementById('anBottomVal').textContent=e.target.value);
+
+function updateAnRunEnabled(){
+  document.getElementById('anRunBtn').disabled = !(loadedCalibration && anImgReady);
+}
+
+function loadAnImage(file){
+  document.getElementById('anCanvasHint').textContent = 'Loading...';
+  loadImageToCanvas(file, anCanvas, 1000, (ctx,w,h)=>{
+    anImgReady = true;
+    updateAnRunEnabled();
+    document.getElementById('anCanvasHint').textContent = 'Image loaded. Click "Detect, Measure & Compute ppm".';
+    document.getElementById('anResultsPanel').style.display = 'none';
+  });
+}
+document.getElementById('anUpload').addEventListener('change', e=>{ if(e.target.files[0]) loadAnImage(e.target.files[0]); });
+document.getElementById('anCapture').addEventListener('change', e=>{ if(e.target.files[0]) loadAnImage(e.target.files[0]); });
+
+async function refreshCalibList(){
+  const keys = await storageList('calibration:');
+  const sel = document.getElementById('storedCalibs');
+  sel.innerHTML = '<option value="">-- select --</option>';
+  keys.forEach(k=>{
+    const opt = document.createElement('option');
+    opt.value = k; opt.textContent = k.replace('calibration:','');
+    sel.appendChild(opt);
+  });
+}
+document.getElementById('refreshCalibs').addEventListener('click', refreshCalibList);
+refreshCalibList();
+
+document.getElementById('loadCalibBtn').addEventListener('click', async ()=>{
+  const key = document.getElementById('storedCalibs').value;
+  if(!key){ document.getElementById('calibSummary').innerHTML='<span style="color:#e0603c;">Select a calibration first.</span>'; return; }
+  const cal = await storageGet(key);
+  const problems = validateCalibration(cal);
+  if(problems.length){
+    document.getElementById('calibSummary').innerHTML = '<span style="color:#e0603c;">Invalid calibration: '+problems.join('; ')+'</span>';
+    loadedCalibration = null; updateAnRunEnabled(); return;
+  }
+  loadedCalibration = cal;
+  showCalibSummary(cal);
+  updateAnRunEnabled();
+});
+
+document.getElementById('calibUpload').addEventListener('change', e=>{
+  const file = e.target.files[0];
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = ev=>{
+    try{
+      const cal = JSON.parse(ev.target.result);
+      let parsed;
+      if(cal.parameters){
+        parsed = {
+          channel: cal.parameters.selected_channel[0],
+          gammaMode: cal.parameters.gamma_exact===false ? 'simple':'exact',
+          slope: cal.parameters.regression_slope,
+          intercept: cal.parameters.regression_intercept,
+          r2: cal.parameters.r_squared,
+          analyte: cal.metadata.analyte, camera: cal.metadata.camera_model,
+          standards: cal.standards.map(s=>({conc:s.concentration, rgb:{r:s.mean_rgb[0],g:s.mean_rgb[1],b:s.mean_rgb[2]}}))
+        };
+        const blank = parsed.standards.reduce((m,s)=>s.conc<m.conc?s:m, parsed.standards[0]);
+        parsed.blankLinearIntensity = linearizeChannel(blank.rgb[parsed.channel]);
+      } else {
+        parsed = cal;
+      }
+      const problems = validateCalibration(parsed);
+      if(problems.length){
+        document.getElementById('calibSummary').innerHTML = '<span style="color:#e0603c;">Invalid file: '+problems.join('; ')+'</span>';
+        loadedCalibration = null; updateAnRunEnabled(); return;
+      }
+      loadedCalibration = parsed;
+      showCalibSummary(parsed);
+      updateAnRunEnabled();
+    }catch(err){
+      document.getElementById('calibSummary').innerHTML = '<span style="color:#e0603c;">Could not parse JSON: '+err.message+'</span>';
+    }
+  };
+  reader.readAsText(file);
+});
+
+function showCalibSummary(cal){
+  document.getElementById('calibSummary').innerHTML = `
+    Loaded: <b>${cal.analyte}</b> · R²=${cal.r2.toFixed(4)}<br>
+    A = ${cal.slope.toFixed(5)}·C + ${cal.intercept.toFixed(5)}
+  `;
+}
+
+document.getElementById('anRunBtn').addEventListener('click', ()=>{
+  const n = parseInt(document.getElementById('numSamples').value);
+  const searchTop = parseInt(document.getElementById('anSearchTop').value)/100;
+  const searchBottom = parseInt(document.getElementById('anSearchBottom').value)/100;
+  const ctx = anCanvas.getContext('2d', {willReadFrequently:true});
+  const w = anCanvas.width, h = anCanvas.height;
+
+  let boxes;
+  try{
+    boxes = detectFlasks(ctx, w, h, n, searchTop, searchBottom);
+  }catch(err){
+    document.getElementById('anCanvasHint').innerHTML = '<span style="color:#e0603c;">'+err.message+'</span>';
+    return;
+  }
+  drawPreview(anCanvas, boxes, boxes._warning);
+  document.getElementById('anCanvasHint').innerHTML = boxes._warning
+    ? '<span style="color:#e0a83c;">'+boxes._warning+'</span>'
+    : `Found ${boxes.length} flask(s).`;
+
+  const tbody = document.getElementById('resultsTable');
+  tbody.innerHTML = '';
+  const cal = loadedCalibration;
+  const allResults = [];
+  boxes.forEach((box,i)=>{
+    let result, error=null;
+    try{ result = segmentAndMeasure(ctx, box, {topCropFrac:0.28, bottomCropFrac:0.12, madK:2.5}); }
+    catch(err){ error = err.message; }
+    allResults.push(result);
+    const tr = document.createElement('tr');
+    if(error){
+      tr.innerHTML = `<td>${i}</td><td colspan="3" style="color:#e0603c;">${error}</td>`;
+    } else {
+      const rgb = result.mean_rgb;
+      const I = linearizeChannel(rgb[1]);
+      const A = absorbance(I, cal.blankLinearIntensity);
+      const C = Math.max(0, (A-cal.intercept)/cal.slope);
+      tr.innerHTML = `
+        <td>${i}</td>
+        <td><span class="swatch" style="background:rgb(${rgb[0]|0},${rgb[1]|0},${rgb[2]|0})"></span>${rgb.map(v=>v.toFixed(1)).join(', ')}</td>
+        <td>${A.toFixed(4)}</td>
+        <td><b>${C.toFixed(3)} ppm</b></td>
+      `;
+    }
+    tbody.appendChild(tr);
+  });
+  drawInlierOverlay(anCanvas, allResults);
+  document.getElementById('anResultsPanel').style.display = 'block';
+});
+</script>
+</body>
+</html>
